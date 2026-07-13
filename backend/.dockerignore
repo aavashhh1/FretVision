@@ -1,0 +1,16 @@
+# Never copy local virtualenvs, caches, secrets, or tests into the image.
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+!.env.hosted.example
+tests/
+README.md
+.python-version
+Dockerfile
+.dockerignore
