@@ -49,6 +49,14 @@ Read these before planning or changing architecture:
 
 The migrations, scripts, and 165 passing tests are the verified executable contract. If a canonical document conflicts with a verified artifact, report the contradiction rather than silently changing either side.
 
+## Accepted ADRs
+
+ADRs decide questions the canonical documents left open. **An ADR can never override canonical documents 01–04.** If an ADR conflicts with 01–04, the canonical document wins and the ADR must be amended or withdrawn.
+
+| ADR | Decides |
+|---|---|
+| `docs/architecture/06-adr-profile-provisioning.md` | **U11 — RESOLVED.** Profile provisioning is FastAPI lazy, idempotent `INSERT ... ON CONFLICT (user_id) DO NOTHING` plus a separate `SELECT`, run inside the caller's transaction. No `auth.users` trigger, no Auth hook, no browser-direct insert, no client-only first-login flow, no service-role call, no request-body `user_id`. Existing `display_name` and `fretting_hand` are never overwritten. |
+
 ## Required local commands
 
 Run the complete database verification from the repository root:

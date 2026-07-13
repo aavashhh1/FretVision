@@ -387,12 +387,12 @@ Never ship a fabricated quota or platform-capability number.
 
 ### 8.3 Genuinely undecided
 
-| # | Item |
-|---|---|
-| **U10** | Latency budget and baseline device for browser CV |
-| **U11** | Profile provisioning strategy: auth trigger, FastAPI upsert, or first-login flow |
-| **U12** | Reaper strategy for expired `idempotency_records` |
-| **U13** | Upgrade path for `accuracy_metric_version` beyond version 1 |
+| # | Item | Status |
+|---|---|---|
+| **U10** | Latency budget and baseline device for browser CV | UNRESOLVED |
+| **U11** | Profile provisioning strategy: auth trigger, FastAPI upsert, or first-login flow | **RESOLVED** — FastAPI lazy, idempotent provisioning. See `06-adr-profile-provisioning.md`. The auth-trigger, Supabase Auth hook, browser-direct insert, client-only first-login, and service-role options are rejected. Provisioning creates defaults with `ON CONFLICT DO NOTHING` and never overwrites an existing `display_name` or `fretting_hand`; start-session defensively ensures the profile inside its own transaction; ownership comes only from the JWT `sub`. |
+| **U12** | Reaper strategy for expired `idempotency_records` | UNRESOLVED |
+| **U13** | Upgrade path for `accuracy_metric_version` beyond version 1 | UNRESOLVED |
 
 ## 9. Recommended Phase 2 sequence
 

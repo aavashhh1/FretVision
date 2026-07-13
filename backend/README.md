@@ -72,6 +72,41 @@ a body field overwrite the subject). Future command DTOs may either reject unkno
 fields or ignore them — that choice is per-DTO — but ownership must always come from
 `actor.user_id`, never from the body.
 
+## Profile provisioning (U11 — `docs/architecture/06-adr-profile-provisioning.md`)
+
+`public.profiles` rows are created **lazily and idempotently by FastAPI** — not by an
+`auth.users` trigger, an Auth hook, a browser-direct insert, or a client first-login flow.
+`app/repositories/profiles.py` exposes:
+
+```python
+async def ensure_profile(connection: asyncpg.Connection, *, user_id: UUID) -> ProfileSnapshot
+```
+
+It runs `INSERT INTO public.profiles (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`
+followed by a separate `SELECT`, and returns an immutable `ProfileSnapshot`. Because the
+insert names only `user_id` and never uses `DO UPDATE`, provisioning creates database
+defaults for a first-time user and **can never overwrite an existing `display_name` or
+`fretting_hand`**. It is safe to call on every command, forever.
+
+**Transaction rule:** `ensure_profile` never opens, commits, or rolls back a transaction. It
+runs on a connection the caller already holds inside its own explicit transaction. Start-session
+(Step 3) will call it in this order:
+
+```text
+BEGIN
+  reserve idempotency record
+  ensure_profile(connection, user_id=actor.user_id)
+  read profile + revision snapshots
+  INSERT session (created)  ->  UPDATE session (active)
+  complete idempotency record
+COMMIT
+```
+
+`user_id` is always `AuthenticatedActor.user_id`, from the verified JWT `sub`. The repository
+accepts no request DTO. Failures raise the **domain** errors `ProfileIdentityNotFoundError` and
+`ProfileSnapshotUnavailableError` (`app/domain/profiles.py`); raw asyncpg exceptions never escape
+the repository, and HTTP mapping is deferred to the command layer in Step 3.
+
 ## Database connection mode
 
 `DB_CONNECTION_MODE` must be `direct` or `session`. Transaction-pooler mode is
@@ -89,3 +124,10 @@ uv run mypy app
 
 Integration tests use isolated, temporary data and never mutate seed/catalog rows,
 truncate tables, or leave rows behind.
+
+The profile-provisioning integration test is **double-gated** and additionally needs
+`TEST_ADMIN_DATABASE_URL`. `fretvision_app` has no privilege on the `auth` schema, so the
+admin DSN is used **only** to create and delete the `auth.users` fixture row (a fresh UUID and
+`@fretvision.invalid` e-mail per run, removed in `finally`, cascading the profile away). All
+provisioning and profile reads/writes go through `fretvision_app`. Both DSNs must point at a
+local host; a non-local host is skipped rather than mutated.
