@@ -1,0 +1,24 @@
+{
+  "name": "fretvision",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aavashhh1/FretVision.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/aavashhh1/FretVision/issues"
+  },
+  "homepage": "https://github.com/aavashhh1/FretVision#readme",
+  "devDependencies": {
+    "supabase": "^2.109.1"
+  }
+}
