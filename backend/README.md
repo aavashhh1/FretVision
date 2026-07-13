@@ -47,6 +47,31 @@ fallback between them:
   publishable key. FastAPI never holds the legacy HS256 secret. Production rejects this
   mode unless `ALLOW_AUTH_SERVER_IN_PROD=true`.
 
+## Ownership convention
+
+The backend connects as `fretvision_app`, which holds `BYPASSRLS`. RLS therefore
+provides **no** protection on the write path — ownership is an application-layer
+obligation.
+
+Invariant: **body identity fields are never authoritative.** A request-body `user_id`,
+`owner_id`, `profile_id`, or similar must never determine ownership. The only
+authoritative user identifier is the verified JWT `sub`, exposed as
+`AuthenticatedActor.user_id` (`app/auth/ownership.py`). `AuthenticatedActor` is
+immutable and carries only `user_id` — no role, no raw claims. Role is authentication
+metadata, not an ownership input.
+
+Routes obtain the actor via the `ActorDep` dependency and pass the authoritative owner
+to services **separately** from the request payload:
+
+```python
+await service.execute(owner_id=actor.user_id, command=command)
+```
+
+Never merge identity into the payload (no `body.model_dump()` plus `user_id`, no letting
+a body field overwrite the subject). Future command DTOs may either reject unknown
+fields or ignore them — that choice is per-DTO — but ownership must always come from
+`actor.user_id`, never from the body.
+
 ## Database connection mode
 
 `DB_CONNECTION_MODE` must be `direct` or `session`. Transaction-pooler mode is
