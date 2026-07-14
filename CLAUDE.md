@@ -49,6 +49,39 @@ Read these before planning or changing architecture:
 
 The migrations, scripts, and 165 passing tests are the verified executable contract. If a canonical document conflicts with a verified artifact, report the contradiction rather than silently changing either side.
 
+## Durable project status and handoff
+
+The changing project status is maintained in:
+
+`docs/PROJECT_STATUS.md`
+
+At the beginning of every task:
+
+1. Read `docs/PROJECT_STATUS.md`.
+2. Compare it with the current Git branch, Git log, implementation, and tests.
+3. Report any inconsistency before editing.
+4. Treat committed code and tests as stronger evidence than a status claim.
+
+At the end of every verified task:
+
+1. Do not mark the task complete based only on generated code.
+2. Run the required linting, type checking, unit tests, integration tests,
+   and scope checks.
+3. Wait for user review when requested.
+4. Update `docs/PROJECT_STATUS.md` in the same branch and pull request.
+5. Record:
+   - what was completed;
+   - verification evidence;
+   - relevant commits or ADRs;
+   - remaining unresolved decisions;
+   - the exact recommended next task and branch name.
+6. Keep this `CLAUDE.md` focused on stable instructions.
+7. Do not duplicate detailed changing status here.
+
+Before finishing, explicitly report whether
+`docs/PROJECT_STATUS.md` was updated.
+Do not commit or push unless the user explicitly requests it.
+
 ## Accepted ADRs
 
 ADRs decide questions the canonical documents left open. **An ADR can never override canonical documents 01–04.** If an ADR conflicts with 01–04, the canonical document wins and the ADR must be amended or withdrawn.
