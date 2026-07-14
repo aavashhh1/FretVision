@@ -43,9 +43,25 @@ Last updated: 2026-07-14
 
 Phase 2 Step 3 — Transactional start-session command
 
-Suggested branch:
+Status:
 
-`feature/start-session-command`
+`IMPLEMENTED AND VERIFIED ON FEATURE BRANCH — AWAITING USER REVIEW`
+
+Branch:
+
+`codex/feature/start-session-command`
+
+Implementation contract approved 2026-07-14:
+
+- `POST /sessions`
+- authenticated ownership only from `AuthenticatedActor.user_id`
+- `Idempotency-Key` header, 8–200 characters
+- canonical operation-scoped SHA-256 request hash
+- 64 KiB request-body limit, including chunked requests
+- `201` response stored and replayed exactly
+- `IDEMPOTENCY_TTL_SECONDS=86400` controls expiry metadata only;
+  cleanup and expired-key reuse remain U12
+- no migration, grant, RLS, trigger, seed, or database-test changes
 
 ## Required transaction behavior
 
@@ -78,15 +94,40 @@ U11 is resolved and must not be reopened.
 
 Backend:
 
-- Ruff: passed
-- Mypy: passed
-- Unit tests: update after each merged task
-- Integration tests: update after each merged task
+- Ruff lint: passed
+- Ruff format: all 14 newly added files pass; the repository-wide
+  `ruff format --check .` baseline remains non-green on pre-existing files
+- Mypy: passed, 35 source files
+- Unit tests: 72 passed, 8 integration tests deselected
+- Integration tests: 8 passed, including 3 start-session transaction tests
+- Scope check: `git diff --check` passed
 
 Database:
 
-- pgTAP: 165/165
+- pgTAP: 165/165 baseline carried forward; not rerun because database
+  artifacts were unchanged
 - Existing migrations, grants, RLS, triggers, and seeds unchanged
+
+Start-session integration verification covers:
+
+- atomic profile provisioning, revision snapshot, session activation, and
+  idempotency completion
+- same-key/same-hash stored response replay
+- same-key/different-hash `409`
+- concurrent duplicate serialization to one session
+- rollback of profile, reservation, and session side effects on failure
+
+## Review gate and following task
+
+Do not move Step 3 into Completed until user review is recorded.
+
+After Step 3 approval, the exact next implementation task is:
+
+Phase 2 Step 4 — Transactional ingest-batch command
+
+Recommended branch:
+
+`codex/feature/ingest-batch-command`
 
 ## Next-agent instructions
 

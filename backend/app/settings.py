@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     db_command_timeout: float = Field(default=30.0, gt=0)
     db_connect_timeout: float = Field(default=10.0, gt=0)
 
+    # ----- Commands -----
+    # Expiry metadata only. Deletion/reuse policy remains unresolved as U12.
+    idempotency_ttl_seconds: int = Field(default=86400, ge=60, le=2592000)
+
     # ----- JWT verification -----
     jwt_verification_mode: JwtVerificationMode
     allow_auth_server_in_prod: bool = False
