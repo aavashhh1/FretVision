@@ -77,6 +77,30 @@ class SessionTargetNotFoundHttpError(AppError):
     default_message = "Published exercise and target revision pair not found"
 
 
+class SessionNotFoundHttpError(AppError):
+    """A session is absent or not owned by the authenticated actor."""
+
+    status_code = 404
+    code = "session_not_found"
+    default_message = "Session not found"
+
+
+class SessionNotActiveHttpError(AppError):
+    """A command requires an active session but found another lifecycle."""
+
+    status_code = 409
+    code = "session_not_active"
+    default_message = "Session is not active"
+
+
+class SampleBatchConflictHttpError(AppError):
+    """A batch conflicts with already persisted session sample state."""
+
+    status_code = 409
+    code = "sample_batch_conflict"
+    default_message = "Sample batch conflicts with persisted session state"
+
+
 def _envelope_response(
     status_code: int, code: str, message: str, headers: Mapping[str, str] | None = None
 ) -> JSONResponse:
