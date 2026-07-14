@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 import jwt
 import pytest
+from app.asgi_body_limit import RequestBodyLimitMiddleware
 from app.asgi_request_id import RequestIdMiddleware
 from app.auth.signing_keys import SigningKeyError
 from app.main import create_app
@@ -143,7 +144,7 @@ async def make_app_client(
 ) -> AsyncIterator[tuple[Any, httpx.AsyncClient]]:
     """Yield the FastAPI app (for state mutation) and an HTTP client bound to it."""
     fastapi_app = create_app(settings)
-    asgi_app = RequestIdMiddleware(fastapi_app)
+    asgi_app = RequestIdMiddleware(RequestBodyLimitMiddleware(fastapi_app))
     async with LifespanManager(asgi_app):
         transport = httpx.ASGITransport(app=asgi_app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

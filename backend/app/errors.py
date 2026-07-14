@@ -61,6 +61,22 @@ class ReadinessError(AppError):
     default_message = "Service not ready"
 
 
+class IdempotencyConflictHttpError(AppError):
+    """An idempotency key was reused for a different command payload."""
+
+    status_code = 409
+    code = "idempotency_key_conflict"
+    default_message = "Idempotency key was already used for a different request"
+
+
+class SessionTargetNotFoundHttpError(AppError):
+    """The requested published exercise/target revision pair is unavailable."""
+
+    status_code = 404
+    code = "session_target_not_found"
+    default_message = "Published exercise and target revision pair not found"
+
+
 def _envelope_response(
     status_code: int, code: str, message: str, headers: Mapping[str, str] | None = None
 ) -> JSONResponse:

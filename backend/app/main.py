@@ -14,7 +14,8 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from app.api import health, protected
+from app.api import health, protected, sessions
+from app.asgi_body_limit import RequestBodyLimitMiddleware
 from app.asgi_request_id import RequestIdMiddleware
 from app.errors import register_error_handlers
 from app.logging import configure_logging
@@ -44,12 +45,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(protected.router)
+    app.include_router(sessions.router)
     return app
 
 
 def build_asgi_app(settings: Settings | None = None) -> Any:
     """Wrap the FastAPI app in the outermost request-id middleware."""
-    return RequestIdMiddleware(create_app(settings))
+    return RequestIdMiddleware(RequestBodyLimitMiddleware(create_app(settings)))
 
 
 # Uvicorn entrypoint: `uvicorn app.main:app`.

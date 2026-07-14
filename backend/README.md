@@ -1,10 +1,10 @@
 # FretVision Backend
 
-FastAPI service (Phase 2, Step 1 foundation): typed settings, an async asyncpg
-database layer, pluggable JWT verification, health/readiness endpoints, structured
-JSON logging, and request IDs. It is the sole writer to Postgres and connects as the
-least-privilege role `fretvision_app`. This step contains **no** write routes,
-aggregation, idempotency commands, or CORS — those arrive in later Phase 2 steps.
+FastAPI service with typed settings, an async asyncpg database layer, pluggable JWT
+verification, health/readiness endpoints, structured JSON logging, request IDs, and the
+transactional start-session command. It is the sole writer to Postgres and connects as
+the least-privilege role `fretvision_app`. Batch ingestion, completion, abandonment,
+aggregation, and CORS remain later Phase 2 work.
 
 ## Requirements
 
@@ -33,6 +33,8 @@ uv run uvicorn app.main:app --reload
 - `GET /healthz` — liveness. Returns 200 even when the database is down.
 - `GET /readyz`  — readiness. Acquires a connection and runs `SELECT 1`; 503 on failure.
 - `GET /me`      — protected; requires a bearer token. Returns only `{sub, role}`.
+- `POST /sessions` — protected, idempotent start-session command. Requires an
+  `Idempotency-Key` header (8–200 characters).
 
 ## JWT verification modes
 
@@ -105,7 +107,29 @@ COMMIT
 `user_id` is always `AuthenticatedActor.user_id`, from the verified JWT `sub`. The repository
 accepts no request DTO. Failures raise the **domain** errors `ProfileIdentityNotFoundError` and
 `ProfileSnapshotUnavailableError` (`app/domain/profiles.py`); raw asyncpg exceptions never escape
-the repository, and HTTP mapping is deferred to the command layer in Step 3.
+the repository, and the start-session command maps them without exposing database details.
+
+## Start session
+
+`POST /sessions` accepts only the validated command fields:
+
+```json
+{
+  "exercise_revision_id": "00000000-0000-0000-0000-000000000000",
+  "target_position_revision_id": "00000000-0000-0000-0000-000000000000",
+  "declared_interval_ms": 2500
+}
+```
+
+Ownership is passed separately from `AuthenticatedActor.user_id`. Body-supplied identity or
+reproducibility fields are ignored and can never override the verified owner or server snapshots.
+The command reserves the user-scoped key, provisions the profile, reads the published revision
+pair, inserts the session as `created`, transitions it to `active` with database `now()`, and stores
+the exact `201` response — all inside one explicit transaction. Same-key/same-body requests replay
+the stored response; the same key with a different canonical request hash returns `409`.
+
+`IDEMPOTENCY_TTL_SECONDS` defaults to 86400 and controls expiry metadata only. Cleanup and expired-
+key reuse remain the unresolved U12 reaper policy. Request bodies are capped at 64 KiB.
 
 ## Database connection mode
 

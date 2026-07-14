@@ -14,6 +14,7 @@ import httpx
 
 from app.auth.factory import build_verifier
 from app.auth.verifier import JWTVerifier
+from app.commands.start_session import StartSessionHandler
 from app.db.database import Database
 from app.settings import Settings
 
@@ -26,12 +27,14 @@ class AppServices:
         http_client: httpx.AsyncClient,
         database: Database,
         verifier: JWTVerifier,
+        start_session: StartSessionHandler,
         stack: AsyncExitStack,
     ) -> None:
         self.settings = settings
         self.http_client = http_client
         self.database = database
         self.verifier = verifier
+        self.start_session = start_session
         self._stack = stack
 
     @classmethod
@@ -46,12 +49,17 @@ class AppServices:
             stack.push_async_callback(database.close)
 
             verifier = build_verifier(settings, http_client)
+            start_session = StartSessionHandler(
+                database=database,
+                idempotency_ttl_seconds=settings.idempotency_ttl_seconds,
+            )
 
             return cls(
                 settings=settings,
                 http_client=http_client,
                 database=database,
                 verifier=verifier,
+                start_session=start_session,
                 stack=stack,
             )
         except BaseException:

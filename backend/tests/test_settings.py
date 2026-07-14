@@ -12,6 +12,14 @@ def test_auth_server_minimal_valid() -> None:
     settings = build_settings()
     assert settings.jwt_verification_mode == "auth_server"
     assert settings.db_connection_mode == "direct"
+    assert settings.idempotency_ttl_seconds == 86400
+
+
+def test_idempotency_ttl_is_bounded() -> None:
+    with pytest.raises(ValidationError):
+        build_settings(idempotency_ttl_seconds=59)
+    with pytest.raises(ValidationError):
+        build_settings(idempotency_ttl_seconds=2592001)
 
 
 def test_jwks_minimal_valid() -> None:
