@@ -1,9 +1,9 @@
 # FretVision Backend
 
 FastAPI service with typed settings, an async asyncpg database layer, pluggable JWT
-verification, health/readiness endpoints, structured JSON logging, request IDs, and the
-transactional start-session command. It is the sole writer to Postgres and connects as
-the least-privilege role `fretvision_app`. Batch ingestion, completion, abandonment,
+verification, health/readiness endpoints, structured JSON logging, request IDs, and
+transactional start-session and sample-batch commands. It is the sole writer to Postgres
+and connects as the least-privilege role `fretvision_app`. Completion, abandonment,
 aggregation, and CORS remain later Phase 2 work.
 
 ## Requirements
@@ -35,6 +35,8 @@ uv run uvicorn app.main:app --reload
 - `GET /me`      — protected; requires a bearer token. Returns only `{sub, role}`.
 - `POST /sessions` — protected, idempotent start-session command. Requires an
   `Idempotency-Key` header (8–200 characters).
+- `POST /sessions/{session_id}/samples/batches` — protected, idempotent ordered sample
+  ingestion. Requires the same `Idempotency-Key` header.
 
 ## JWT verification modes
 
@@ -130,6 +132,19 @@ the stored response; the same key with a different canonical request hash return
 
 `IDEMPOTENCY_TTL_SECONDS` defaults to 86400 and controls expiry metadata only. Cleanup and expired-
 key reuse remain the unresolved U12 reaper policy. Request bodies are capped at 64 KiB.
+
+## Ingest sample batch
+
+The batch endpoint accepts a non-empty `samples` array. Each sample carries its client-generated
+UUID, zero-based `seq`, validity shape, and monotonic `interval_end_offset_ms`. Valid samples require
+accuracy and confidence; invalid samples require an approved reason and omit accuracy.
+
+The command hashes the validated samples together with the authoritative path `session_id`. Inside
+one explicit transaction it reserves the user-scoped `ingest_batch` key, locks the owned session,
+requires `active` lifecycle, verifies that sequence and interval offsets continue the persisted
+tail, inserts every sample, and stores the exact synchronous `200` response. Replays roll back their
+read-only transaction before returning the stored response. Cross-user access returns the same
+`404` as a missing session, and terminal or conflicting batch state returns `409`.
 
 ## Database connection mode
 

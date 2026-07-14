@@ -14,6 +14,7 @@ import httpx
 
 from app.auth.factory import build_verifier
 from app.auth.verifier import JWTVerifier
+from app.commands.ingest_batch import IngestBatchHandler
 from app.commands.start_session import StartSessionHandler
 from app.db.database import Database
 from app.settings import Settings
@@ -28,6 +29,7 @@ class AppServices:
         database: Database,
         verifier: JWTVerifier,
         start_session: StartSessionHandler,
+        ingest_batch: IngestBatchHandler,
         stack: AsyncExitStack,
     ) -> None:
         self.settings = settings
@@ -35,6 +37,7 @@ class AppServices:
         self.database = database
         self.verifier = verifier
         self.start_session = start_session
+        self.ingest_batch = ingest_batch
         self._stack = stack
 
     @classmethod
@@ -53,6 +56,10 @@ class AppServices:
                 database=database,
                 idempotency_ttl_seconds=settings.idempotency_ttl_seconds,
             )
+            ingest_batch = IngestBatchHandler(
+                database=database,
+                idempotency_ttl_seconds=settings.idempotency_ttl_seconds,
+            )
 
             return cls(
                 settings=settings,
@@ -60,6 +67,7 @@ class AppServices:
                 database=database,
                 verifier=verifier,
                 start_session=start_session,
+                ingest_batch=ingest_batch,
                 stack=stack,
             )
         except BaseException:

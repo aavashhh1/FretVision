@@ -39,9 +39,20 @@ Last updated: 2026-07-14
   - Decision: FastAPI lazy idempotent provisioning
   - ADR: `docs/architecture/06-adr-profile-provisioning.md`
 
+- Phase 2 Step 3 — Transactional start-session command
+  - Status: COMPLETE AND MERGED
+  - Merge commit: `622ae4d`
+  - Includes:
+    - authenticated `POST /sessions`
+    - user-scoped start-session idempotency
+    - lazy profile provisioning in the command transaction
+    - server-copied profile and revision snapshots
+    - atomic `created` to `active` transition
+    - 64 KiB request-body enforcement
+
 ## Current task
 
-Phase 2 Step 3 — Transactional start-session command
+Phase 2 Step 4 — Transactional ingest-batch command
 
 Status:
 
@@ -49,34 +60,38 @@ Status:
 
 Branch:
 
-`codex/feature/start-session-command`
+`feature/ingest-batch-command`
 
 Implementation contract approved 2026-07-14:
 
-- `POST /sessions`
+- `POST /sessions/{session_id}/samples/batches`
 - authenticated ownership only from `AuthenticatedActor.user_id`
 - `Idempotency-Key` header, 8–200 characters
-- canonical operation-scoped SHA-256 request hash
-- 64 KiB request-body limit, including chunked requests
-- `201` response stored and replayed exactly
+- canonical SHA-256 request hash includes the authoritative path session
+- non-empty, internally contiguous batches with unique sample UUIDs
+- strictly increasing interval offsets within and across persisted chunks
+- owned session row locked and required to be `active`
+- first batch starts at `seq=0`; later batches continue persisted `max(seq)+1`
+- synchronous `200` response stored and replayed exactly
 - `IDEMPOTENCY_TTL_SECONDS=86400` controls expiry metadata only;
   cleanup and expired-key reuse remain U12
 - no migration, grant, RLS, trigger, seed, or database-test changes
 
 ## Required transaction behavior
 
-The start-session command must:
+The ingest-batch command must:
 
 1. Derive ownership from `AuthenticatedActor.user_id`.
-2. Reserve the idempotency key.
-3. Resolve replay or conflict.
-4. Call `ensure_profile()` in the same transaction.
-5. Read profile and revision snapshots.
-6. Copy `fretting_hand_snapshot` from the profile.
-7. Insert the session in `created` state.
-8. Activate it using a server-generated timestamp.
-9. Mark the idempotency record completed.
-10. Commit.
+2. Reserve the user-scoped `ingest_batch` idempotency key.
+3. Resolve replay or hash conflict.
+4. Lock the owned session and require `active` lifecycle.
+5. Read the persisted sample sequence and interval-offset tail.
+6. Require the batch to continue both ordered sequences.
+7. Insert every structurally validated sample.
+8. Mark the idempotency record completed with the session and exact response.
+9. Commit.
+
+Any error rolls back both the sample rows and idempotency reservation.
 
 ## Open decisions and blockers
 
@@ -95,11 +110,11 @@ U11 is resolved and must not be reopened.
 Backend:
 
 - Ruff lint: passed
-- Ruff format: all 14 newly added files pass; the repository-wide
+- Ruff format: all 9 newly added Step 4 files pass; the repository-wide
   `ruff format --check .` baseline remains non-green on pre-existing files
-- Mypy: passed, 35 source files
-- Unit tests: 72 passed, 8 integration tests deselected
-- Integration tests: 8 passed, including 3 start-session transaction tests
+- Mypy: passed, 38 source files
+- Unit tests: 93 passed, 12 integration tests deselected
+- Integration tests: 12 passed, including 4 ingest-batch transaction tests
 - Scope check: `git diff --check` passed
 
 Database:
@@ -108,26 +123,27 @@ Database:
   artifacts were unchanged
 - Existing migrations, grants, RLS, triggers, and seeds unchanged
 
-Start-session integration verification covers:
+Ingest-batch integration verification covers:
 
-- atomic profile provisioning, revision snapshot, session activation, and
-  idempotency completion
+- atomic sample insertion and idempotency completion
 - same-key/same-hash stored response replay
 - same-key/different-hash `409`
-- concurrent duplicate serialization to one session
-- rollback of profile, reservation, and session side effects on failure
+- concurrent duplicate serialization to one batch
+- cross-user session denial and terminal-session rejection
+- persisted sequence continuation enforcement
+- rollback of all new rows and the reservation on sample-identity conflict
 
 ## Review gate and following task
 
-Do not move Step 3 into Completed until user review is recorded.
+Do not move Step 4 into Completed until user review is recorded.
 
-After Step 3 approval, the exact next implementation task is:
+After Step 4 approval, the exact next implementation task is:
 
-Phase 2 Step 4 — Transactional ingest-batch command
+Phase 2 Step 5 — Transactional complete-session command
 
 Recommended branch:
 
-`codex/feature/ingest-batch-command`
+`feature/complete-session-command`
 
 ## Next-agent instructions
 

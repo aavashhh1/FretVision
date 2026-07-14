@@ -49,6 +49,37 @@ WHERE id = $1 AND state = 'processing'
 RETURNING id
 """
 
+RESERVE_INGEST_BATCH_SQL = """
+INSERT INTO public.idempotency_records (
+  user_id, operation, idempotency_key, request_hash, expires_at
+)
+VALUES (
+  $1, 'ingest_batch', $2, $3,
+  now() + pg_catalog.make_interval(secs => $4::double precision)
+)
+ON CONFLICT (user_id, operation, idempotency_key) DO NOTHING
+RETURNING id
+"""
+
+LOCK_EXISTING_INGEST_BATCH_SQL = """
+SELECT id, request_hash, state, response_status, response_body
+FROM public.idempotency_records
+WHERE user_id = $1
+  AND operation = 'ingest_batch'
+  AND idempotency_key = $2
+FOR UPDATE
+"""
+
+COMPLETE_INGEST_BATCH_SQL = """
+UPDATE public.idempotency_records
+SET session_id = $2,
+    state = 'completed',
+    response_status = $3,
+    response_body = $4::jsonb
+WHERE id = $1 AND state = 'processing'
+RETURNING id
+"""
+
 
 def _decode_response_body(value: object) -> dict[str, Any]:
     if isinstance(value, str):
@@ -132,3 +163,78 @@ async def complete_start_session(
     )
     if completed_id is None:
         raise IdempotencyRecordUnavailableError("idempotency reservation could not be completed")
+
+
+async def reserve_ingest_batch(
+    connection: asyncpg.Connection,
+    *,
+    user_id: UUID,
+    idempotency_key: str,
+    request_hash: str,
+    ttl_seconds: int,
+) -> IdempotencyResolution:
+    """Reserve an ingest-batch key, or lock and return its completed response."""
+    try:
+        inserted_id = await connection.fetchval(
+            RESERVE_INGEST_BATCH_SQL,
+            user_id,
+            idempotency_key,
+            request_hash,
+            ttl_seconds,
+        )
+    except asyncpg.ForeignKeyViolationError as exc:
+        raise AuthenticatedSubjectNotFoundError(
+            "authenticated subject no longer exists"
+        ) from exc
+
+    if inserted_id is not None:
+        return NewIdempotencyReservation(record_id=UUID(str(inserted_id)))
+
+    record = await connection.fetchrow(
+        LOCK_EXISTING_INGEST_BATCH_SQL,
+        user_id,
+        idempotency_key,
+    )
+    if record is None:
+        raise IdempotencyRecordUnavailableError(
+            "conflicting idempotency record disappeared before it could be locked"
+        )
+    if record["request_hash"] != request_hash:
+        raise IdempotencyKeyConflictError(
+            "idempotency key was already used for a different request"
+        )
+    if record["state"] != "completed":
+        raise IdempotencyRecordUnavailableError(
+            "locked idempotency record did not reach completed state"
+        )
+    status = record["response_status"]
+    if not isinstance(status, int):
+        raise IdempotencyRecordUnavailableError(
+            "completed idempotency record has no response status"
+        )
+    return IdempotencyReplay(
+        response_status=status,
+        response_body=_decode_response_body(record["response_body"]),
+    )
+
+
+async def complete_ingest_batch(
+    connection: asyncpg.Connection,
+    *,
+    record_id: UUID,
+    session_id: UUID,
+    response_status: int,
+    response_body: dict[str, Any],
+) -> None:
+    """Attach the session and exact batch response to its reservation."""
+    completed_id = await connection.fetchval(
+        COMPLETE_INGEST_BATCH_SQL,
+        record_id,
+        session_id,
+        response_status,
+        json.dumps(response_body, sort_keys=True, separators=(",", ":")),
+    )
+    if completed_id is None:
+        raise IdempotencyRecordUnavailableError(
+            "ingest-batch idempotency reservation could not be completed"
+        )
